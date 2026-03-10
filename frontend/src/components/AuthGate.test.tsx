@@ -1,10 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 import { AuthGate } from "@/components/AuthGate";
 
 describe("AuthGate", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("blocks invalid credentials", async () => {

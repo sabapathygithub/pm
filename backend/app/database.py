@@ -14,12 +14,19 @@ def _get_connection(db_path: Path) -> sqlite3.Connection:
 
 
 def _ensure_user(conn: sqlite3.Connection, username: str) -> int:
-    row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    row = conn.execute(
+        "SELECT id FROM users WHERE username = ?", (username,)
+    ).fetchone()
     if row:
         return int(row["id"])
 
-    cursor = conn.execute("INSERT INTO users (username) VALUES (?)", (username,))
-    return int(cursor.lastrowid)
+    conn.execute("INSERT OR IGNORE INTO users (username) VALUES (?)", (username,))
+    row = conn.execute(
+        "SELECT id FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    if not row:
+        raise ValueError("Failed to create or resolve user.")
+    return int(row["id"])
 
 
 def _ensure_board(conn: sqlite3.Connection, user_id: int) -> None:
@@ -147,3 +154,56 @@ def update_conversation(
         )
 
     return conversation
+
+
+def apply_ai_operation(
+    db_path: Path,
+    username: str,
+    user_message: str,
+    assistant_message: str,
+    board_update: dict | None,
+    max_history_messages: int,
+) -> tuple[dict, bool, list[dict[str, str]]]:
+    if max_history_messages < 2:
+        raise ValueError("max_history_messages must be at least 2.")
+
+    with _get_connection(db_path) as conn:
+        user_id = _ensure_user(conn, username)
+        _ensure_board(conn, user_id)
+
+        row = conn.execute(
+            "SELECT board_json, conversation_json FROM boards WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("Board not found for user.")
+
+        current_board = json.loads(str(row["board_json"]))
+        raw_history = json.loads(str(row["conversation_json"]))
+        history = raw_history if isinstance(raw_history, list) else []
+
+        board_updated = False
+        next_board = current_board
+        if board_update is not None:
+            validate_board_payload(board_update)
+            next_board = board_update
+            board_updated = True
+
+        next_history = [
+            *history,
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": assistant_message},
+        ]
+        if len(next_history) > max_history_messages:
+            next_history = next_history[-max_history_messages:]
+
+        conn.execute(
+            """
+            UPDATE boards
+            SET board_json = ?, conversation_json = ?, updated_at = datetime('now')
+            WHERE user_id = ?
+            """,
+            (json.dumps(next_board), json.dumps(next_history), user_id),
+        )
+
+        return next_board, board_updated, next_history

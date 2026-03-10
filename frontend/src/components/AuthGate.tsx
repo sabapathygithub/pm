@@ -2,10 +2,13 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
-
-const AUTH_KEY = "pm-authenticated";
-const VALID_USERNAME = "user";
-const VALID_PASSWORD = "password";
+import {
+  AUTH_TOKEN_KEY,
+  buildAuthToken,
+  clearAuthToken,
+  VALID_PASSWORD,
+  VALID_USERNAME,
+} from "@/lib/auth";
 
 export const AuthGate = () => {
   const [username, setUsername] = useState("");
@@ -14,15 +17,15 @@ export const AuthGate = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    const existing = window.localStorage.getItem(AUTH_KEY);
-    setIsLoggedIn(existing === "true");
+    const existing = window.localStorage.getItem(AUTH_TOKEN_KEY);
+    setIsLoggedIn(Boolean(existing));
   }, []);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (username === VALID_USERNAME && password === VALID_PASSWORD) {
-      window.localStorage.setItem(AUTH_KEY, "true");
+      window.localStorage.setItem(AUTH_TOKEN_KEY, buildAuthToken(username, password));
       setError("");
       setUsername("");
       setPassword("");
@@ -34,7 +37,7 @@ export const AuthGate = () => {
   };
 
   const handleLogout = () => {
-    window.localStorage.removeItem(AUTH_KEY);
+    clearAuthToken();
     setIsLoggedIn(false);
   };
 
@@ -78,7 +81,12 @@ export const AuthGate = () => {
             </label>
 
             {error ? (
-              <p className="text-sm font-semibold text-[var(--secondary-purple)]">{error}</p>
+              <p
+                className="text-sm font-semibold text-[var(--secondary-purple)]"
+                role="alert"
+              >
+                {error}
+              </p>
             ) : null}
 
             <button

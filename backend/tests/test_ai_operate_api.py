@@ -14,7 +14,13 @@ def _make_client(tmp_path: Path) -> TestClient:
     return TestClient(app)
 
 
-def test_ai_operate_valid_output_without_board_update(tmp_path: Path, monkeypatch) -> None:
+def _auth_headers() -> dict[str, str]:
+    return {"Authorization": "Basic dXNlcjpwYXNzd29yZA=="}
+
+
+def test_ai_operate_valid_output_without_board_update(
+    tmp_path: Path, monkeypatch
+) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     def fake_request_board_operation(
@@ -32,13 +38,16 @@ def test_ai_operate_valid_output_without_board_update(tmp_path: Path, monkeypatc
             "board_update": None,
         }
 
-    monkeypatch.setattr("app.main.request_board_operation", fake_request_board_operation)
+    monkeypatch.setattr(
+        "app.main.request_board_operation", fake_request_board_operation
+    )
     client = _make_client(tmp_path)
 
     with client:
         response = client.post(
             "/api/ai/operate",
             json={"message": "Summarize current board"},
+            headers=_auth_headers(),
         )
 
     assert response.status_code == 200
@@ -73,15 +82,18 @@ def test_ai_operate_valid_output_with_board_update(tmp_path: Path, monkeypatch) 
             "board_update": updated_board,
         }
 
-    monkeypatch.setattr("app.main.request_board_operation", fake_request_board_operation)
+    monkeypatch.setattr(
+        "app.main.request_board_operation", fake_request_board_operation
+    )
     client = _make_client(tmp_path)
 
     with client:
         response = client.post(
             "/api/ai/operate",
             json={"message": "Rename backlog to ideas"},
+            headers=_auth_headers(),
         )
-        board_response = client.get("/api/board")
+        board_response = client.get("/api/board", headers=_auth_headers())
 
     assert response.status_code == 200
     payload = response.json()
@@ -92,7 +104,9 @@ def test_ai_operate_valid_output_with_board_update(tmp_path: Path, monkeypatch) 
     assert board_response.json()["columns"][0]["title"] == "Ideas"
 
 
-def test_ai_operate_rejects_invalid_structured_output(tmp_path: Path, monkeypatch) -> None:
+def test_ai_operate_rejects_invalid_structured_output(
+    tmp_path: Path, monkeypatch
+) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     def fake_request_board_operation(
@@ -103,7 +117,25 @@ def test_ai_operate_rejects_invalid_structured_output(tmp_path: Path, monkeypatc
     ) -> dict:
         return {"unexpected": "shape"}
 
-    monkeypatch.setattr("app.main.request_board_operation", fake_request_board_operation)
+    monkeypatch.setattr(
+        "app.main.request_board_operation", fake_request_board_operation
+    )
+    client = _make_client(tmp_path)
+
+    with client:
+        response = client.post(
+            "/api/ai/operate",
+            json={"message": "Do something"},
+            headers=_auth_headers(),
+        )
+
+    assert response.status_code == 502
+    assert "required structured output" in response.json()["detail"]
+
+
+def test_ai_operate_requires_authorization_header(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
     client = _make_client(tmp_path)
 
     with client:
@@ -112,5 +144,4 @@ def test_ai_operate_rejects_invalid_structured_output(tmp_path: Path, monkeypatc
             json={"message": "Do something"},
         )
 
-    assert response.status_code == 502
-    assert "required structured output" in response.json()["detail"]
+    assert response.status_code == 401

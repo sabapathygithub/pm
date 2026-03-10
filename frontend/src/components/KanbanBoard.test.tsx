@@ -107,10 +107,20 @@ describe("KanbanBoard", () => {
     expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
   });
 
+  it("keeps AI sidebar closed by default and opens on toggle", async () => {
+    await renderBoardOffline();
+
+    expect(screen.queryByLabelText("AI message")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /open ai assistant/i }));
+
+    expect(screen.getByLabelText("AI message")).toBeInTheDocument();
+  });
+
   it("renames a column", async () => {
     await renderBoardOffline();
     const column = getFirstColumn();
-    const input = within(column).getByLabelText("Column title");
+    const input = within(column).getByLabelText(/column title for/i);
     await userEvent.clear(input);
     await userEvent.type(input, "New Name");
     expect(input).toHaveValue("New Name");
@@ -183,7 +193,7 @@ describe("KanbanBoard", () => {
     render(<KanbanBoard />);
 
     const column = await screen.findByTestId("column-col-backlog");
-    const input = within(column).getByLabelText("Column title");
+    const input = within(column).getByLabelText(/column title for/i);
     await userEvent.clear(input);
     await userEvent.type(input, "API Saved");
 
@@ -202,7 +212,7 @@ describe("KanbanBoard", () => {
     const firstRender = render(<KanbanBoard />);
 
     const firstColumn = await screen.findByTestId("column-col-backlog");
-    const input = within(firstColumn).getByLabelText("Column title");
+    const input = within(firstColumn).getByLabelText(/column title for/i);
     await userEvent.clear(input);
     await userEvent.type(input, "Persisted Name");
 
@@ -227,6 +237,7 @@ describe("KanbanBoard", () => {
     render(<KanbanBoard />);
 
     await screen.findByTestId("column-col-backlog");
+    await userEvent.click(screen.getByRole("button", { name: /open ai assistant/i }));
     await userEvent.type(screen.getByLabelText("AI message"), "Rename backlog");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -251,10 +262,81 @@ describe("KanbanBoard", () => {
     render(<KanbanBoard />);
 
     await screen.findByTestId("column-col-backlog");
+    await userEvent.click(screen.getByRole("button", { name: /open ai assistant/i }));
     await userEvent.type(screen.getByLabelText("AI message"), "Rename first column to AI Ideas");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
     expect(await screen.findByDisplayValue("AI Ideas")).toBeInTheDocument();
     expect(screen.getByText(/ai updated board/i)).toBeInTheDocument();
+  });
+
+  it("does not crash when API returns malformed card references", async () => {
+    const malformedBoard = cloneBoard(initialData);
+    malformedBoard.columns[0].cardIds.push("missing-card-id");
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (input === "/api/board" && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(malformedBoard), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (input === "/api/board" && init?.method === "PUT") {
+        return new Response(JSON.stringify(malformedBoard), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    render(<KanbanBoard />);
+
+    expect(
+      await screen.findByText(/using local demo board \(backend unavailable\)/i)
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+  });
+
+  it("renders AI error when AI response shape is invalid", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (input === "/api/board") {
+        const method = init?.method ?? "GET";
+        if (method === "GET") {
+          return new Response(JSON.stringify(initialData), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (method === "PUT") {
+          return new Response(JSON.stringify(initialData), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      if (input === "/api/ai/operate" && init?.method === "POST") {
+        return new Response(JSON.stringify({ invalid: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(null, { status: 404 });
+    });
+
+    render(<KanbanBoard />);
+
+    await screen.findByTestId("column-col-backlog");
+    await userEvent.click(screen.getByRole("button", { name: /open ai assistant/i }));
+    await userEvent.type(screen.getByLabelText("AI message"), "Rename backlog");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    expect(
+      await screen.findByText(/ai response had an invalid shape\./i)
+    ).toBeInTheDocument();
   });
 });

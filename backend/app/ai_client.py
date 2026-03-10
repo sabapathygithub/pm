@@ -1,12 +1,30 @@
 import httpx
 import json
 
-OPENROUTER_MODEL = "openai/gpt-oss-120b:free"
+OPENROUTER_MODEL = "openai/gpt-oss-20b:free"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 class OpenRouterError(Exception):
     pass
+
+
+def _extract_text_content(message: dict) -> str:
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                text = item.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text.strip())
+        if parts:
+            return "\n".join(parts)
+
+    raise OpenRouterError("OpenRouter returned empty content.")
 
 
 def ask_openrouter(prompt: str, api_key: str) -> str:
@@ -49,11 +67,7 @@ def ask_openrouter(prompt: str, api_key: str) -> str:
     if not isinstance(message, dict):
         raise OpenRouterError("OpenRouter response message was invalid.")
 
-    content = message.get("content")
-    if not isinstance(content, str) or not content.strip():
-        raise OpenRouterError("OpenRouter returned empty content.")
-
-    return content.strip()
+    return _extract_text_content(message)
 
 
 def request_board_operation(
@@ -132,9 +146,7 @@ def request_board_operation(
     if not isinstance(message, dict):
         raise OpenRouterError("OpenRouter response message was invalid.")
 
-    content = message.get("content")
-    if not isinstance(content, str) or not content.strip():
-        raise OpenRouterError("OpenRouter returned empty content.")
+    content = _extract_text_content(message)
 
     try:
         parsed = json.loads(content)

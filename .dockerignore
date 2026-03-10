@@ -8,3 +8,4 @@
 frontend/.next/
 frontend/test-results/
 .git/
+.env

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -10,6 +12,7 @@ type AiSidebarProps = {
   error: string;
   onDraftChange: (value: string) => void;
   onSend: () => void;
+  onClose: () => void;
 };
 
 export const AiSidebar = ({
@@ -19,15 +22,46 @@ export const AiSidebar = ({
   error,
   onDraftChange,
   onSend,
+  onClose,
 }: AiSidebarProps) => {
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView?.({ block: "end" });
+  }, [messages]);
+
   return (
     <aside className="h-full rounded-3xl border border-[var(--stroke)] bg-white p-5 shadow-[var(--shadow)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-        AI Copilot
-      </p>
-      <h2 className="mt-2 font-display text-2xl font-semibold text-[var(--navy-dark)]">
-        Board Assistant
-      </h2>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+            AI Copilot
+          </p>
+          <h2 className="mt-2 font-display text-2xl font-semibold text-[var(--navy-dark)]">
+            Board Assistant
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close AI assistant"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--stroke)] text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+            aria-hidden="true"
+          >
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
+      </div>
       <p className="mt-1 text-sm text-[var(--gray-text)]">
         Ask for card updates, moves, and column renames.
       </p>
@@ -48,6 +82,7 @@ export const AiSidebar = ({
             {message.content}
           </div>
         ))}
+        <div ref={bottomRef} aria-hidden="true" />
       </div>
 
       <div className="mt-4 space-y-3">
@@ -64,7 +99,9 @@ export const AiSidebar = ({
         </label>
 
         {error ? (
-          <p className="text-sm font-semibold text-[var(--secondary-purple)]">{error}</p>
+          <p className="text-sm font-semibold text-[var(--secondary-purple)]" role="alert">
+            {error}
+          </p>
         ) : null}
 
         <button

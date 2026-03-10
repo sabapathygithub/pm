@@ -4,6 +4,8 @@ import clsx from "clsx";
 import { useEffect, useState } from "react";
 import type { Card } from "@/lib/kanban";
 
+const iconClassName = "h-3.5 w-3.5";
+
 type KanbanCardProps = {
   card: Card;
   onUpdate: (cardId: string, title: string, details: string) => void;
@@ -91,37 +93,89 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
               <button
                 type="button"
                 onClick={handleSave}
-                className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--secondary-purple)] transition hover:border-[var(--stroke)]"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[var(--secondary-purple)] transition hover:border-[var(--stroke)]"
                 aria-label={`Save ${card.title}`}
               >
-                Save
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={iconClassName}
+                  aria-hidden="true"
+                >
+                  <path d="M5 21h14" />
+                  <path d="M7 21V7h8l2 2v12" />
+                  <path d="M9 3h6v4H9z" />
+                </svg>
               </button>
               <button
                 type="button"
                 onClick={handleCancel}
-                className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
                 aria-label={`Cancel editing ${card.title}`}
               >
-                Cancel
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={iconClassName}
+                  aria-hidden="true"
+                >
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
               </button>
             </>
           ) : (
             <button
               type="button"
               onClick={() => setIsEditing(true)}
-              className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
               aria-label={`Edit ${card.title}`}
             >
-              Edit
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={iconClassName}
+                aria-hidden="true"
+              >
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z" />
+              </svg>
             </button>
           )}
           <button
             type="button"
             onClick={() => onDelete(card.id)}
-            className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
             aria-label={`Delete ${card.title}`}
           >
-            Remove
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={iconClassName}
+              aria-hidden="true"
+            >
+              <path d="M3 6h18" />
+              <path d="M8 6V4h8v2" />
+              <path d="M19 6l-1 14H6L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
           </button>
         </div>
       </div>

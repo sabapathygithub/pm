@@ -16,6 +16,7 @@ describe("AiSidebar", () => {
         error=""
         onDraftChange={() => {}}
         onSend={() => {}}
+        onClose={() => {}}
       />
     );
 
@@ -35,6 +36,7 @@ describe("AiSidebar", () => {
         error=""
         onDraftChange={onDraftChange}
         onSend={onSend}
+        onClose={() => {}}
       />
     );
 

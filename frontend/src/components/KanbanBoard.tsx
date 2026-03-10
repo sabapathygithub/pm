@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
+  closestCenter,
   useSensor,
   useSensors,
-  closestCorners,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { AiSidebar } from "@/components/AiSidebar";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
@@ -27,6 +29,8 @@ export const KanbanBoard = () => {
   const [chatDraft, setChatDraft] = useState<string>("");
   const [isSendingAi, setIsSendingAi] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
+  const renameSaveTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -54,6 +58,14 @@ export const KanbanBoard = () => {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (renameSaveTimeoutRef.current !== null) {
+        window.clearTimeout(renameSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const applyBoardUpdate = (updater: (previous: BoardData) => BoardData) => {
     setBoard((previous) => {
       const next = updater(previous);
@@ -67,6 +79,9 @@ export const KanbanBoard = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
@@ -91,12 +106,26 @@ export const KanbanBoard = () => {
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
-    applyBoardUpdate((prev) => ({
-      ...prev,
-      columns: prev.columns.map((column) =>
-        column.id === columnId ? { ...column, title } : column
-      ),
-    }));
+    setBoard((prev) => {
+      const next = {
+        ...prev,
+        columns: prev.columns.map((column) =>
+          column.id === columnId ? { ...column, title } : column
+        ),
+      };
+
+      if (renameSaveTimeoutRef.current !== null) {
+        window.clearTimeout(renameSaveTimeoutRef.current);
+      }
+
+      renameSaveTimeoutRef.current = window.setTimeout(() => {
+        void saveBoard(next).then((ok) => {
+          setSyncMessage(ok ? "Saved" : "Save failed (local changes still visible)");
+        });
+      }, 350);
+
+      return next;
+    });
   };
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
@@ -211,7 +240,11 @@ export const KanbanBoard = () => {
                 Keep momentum visible. Rename columns, drag cards between stages,
                 and capture quick notes without getting buried in settings.
               </p>
-              <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--gray-text)]">
+              <p
+                className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--gray-text)]"
+                role="status"
+                aria-live="polite"
+              >
                 {syncMessage}
               </p>
             </div>
@@ -237,10 +270,14 @@ export const KanbanBoard = () => {
           </div>
         </header>
 
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section
+          className={
+            isAiSidebarOpen ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]" : "grid gap-6"
+          }
+        >
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={closestCenter}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
@@ -249,7 +286,9 @@ export const KanbanBoard = () => {
                 <KanbanColumn
                   key={column.id}
                   column={column}
-                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  cards={column.cardIds
+                    .map((cardId) => board.cards[cardId])
+                    .filter((card): card is (typeof board.cards)[string] => Boolean(card))}
                   onRename={handleRenameColumn}
                   onAddCard={handleAddCard}
                   onUpdateCard={handleUpdateCard}
@@ -266,15 +305,42 @@ export const KanbanBoard = () => {
             </DragOverlay>
           </DndContext>
 
-          <AiSidebar
-            messages={chatMessages}
-            draft={chatDraft}
-            isSending={isSendingAi}
-            error={aiError}
-            onDraftChange={setChatDraft}
-            onSend={handleSendAiMessage}
-          />
+          {isAiSidebarOpen ? (
+            <AiSidebar
+              messages={chatMessages}
+              draft={chatDraft}
+              isSending={isSendingAi}
+              error={aiError}
+              onDraftChange={setChatDraft}
+              onSend={handleSendAiMessage}
+              onClose={() => setIsAiSidebarOpen(false)}
+            />
+          ) : null}
         </section>
+
+        {!isAiSidebarOpen ? (
+          <button
+            type="button"
+            onClick={() => setIsAiSidebarOpen(true)}
+            aria-label="Open AI assistant"
+            className="fixed bottom-6 right-6 z-30 inline-flex h-14 w-14 items-center justify-center rounded-full border border-[var(--stroke)] bg-[var(--secondary-purple)] text-white shadow-[0_14px_32px_rgba(3,33,71,0.22)] transition hover:scale-[1.03] hover:opacity-95"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-6 w-6"
+              aria-hidden="true"
+            >
+              <path d="M7 10h10" />
+              <path d="M7 14h6" />
+              <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H7l-4 3v-5.5A8.5 8.5 0 1 1 21 11.5Z" />
+            </svg>
+          </button>
+        ) : null}
       </main>
     </div>
   );

@@ -17,7 +17,7 @@ Persistence notes:
 
 AI connectivity notes:
 - `OPENROUTER_API_KEY` must be set in environment (root `.env` is used by `docker-compose`)
-- Model used: `openai/gpt-oss-120b(free)`
+- Model used: `openai/gpt-oss-120b:free`
 
 ## Local run (non-Docker)
 
