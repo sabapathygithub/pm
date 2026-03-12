@@ -86,9 +86,10 @@ describe("KanbanBoard", () => {
 
     const column = await screen.findByTestId("column-col-backlog");
     await userEvent.click(within(column).getByRole("button", { name: /add a card/i }));
-    await userEvent.type(within(column).getByPlaceholderText(/card title/i), "New card");
-    await userEvent.type(within(column).getByPlaceholderText(/details/i), "Notes");
-    await userEvent.click(within(column).getByRole("button", { name: /add card/i }));
+    const dialog = screen.getByRole("dialog", { name: /add card/i });
+    await userEvent.type(within(dialog).getByPlaceholderText(/card title/i), "New card");
+    await userEvent.type(within(dialog).getByPlaceholderText(/^details$/i), "Notes");
+    await userEvent.click(within(dialog).getByRole("button", { name: /add card/i }));
 
     expect(within(column).getByText("New card")).toBeInTheDocument();
 
