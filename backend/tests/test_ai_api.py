@@ -53,7 +53,7 @@ def test_ai_smoke_returns_openrouter_answer(tmp_path: Path, monkeypatch) -> None
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["model"] == "openai/gpt-oss-120b:free"
+    assert payload["model"] == "openai/gpt-oss-120b"
     assert payload["prompt"] == "2+2"
     assert payload["response"] == "4"
 

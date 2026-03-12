@@ -1,7 +1,7 @@
 import httpx
 import json
 
-OPENROUTER_MODEL = "openai/gpt-oss-120b:free"
+OPENROUTER_MODEL = "openai/gpt-oss-120b"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 

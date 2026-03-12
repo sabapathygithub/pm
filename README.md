@@ -5,7 +5,7 @@ A local-first project management app with multi-user auth, multi-board Kanban, a
 Tech stack:
 - Frontend: Next.js + React + TypeScript
 - Backend: FastAPI + SQLite
-- AI: OpenRouter (`openai/gpt-oss-120b:free`)
+- AI: OpenRouter (`openai/gpt-oss-120b`)
 - Packaging: Docker + docker-compose
 
 ## Features

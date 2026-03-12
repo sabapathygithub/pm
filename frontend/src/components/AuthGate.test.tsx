@@ -96,4 +96,17 @@ describe("AuthGate", () => {
     expect(await screen.findByRole("heading", { name: /kanban studio/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
   });
+
+  it("toggles and persists theme", async () => {
+    render(<AuthGate />);
+
+    const toggle = await screen.findByRole("button", { name: /toggle theme/i });
+    expect(toggle).toHaveTextContent(/dark mode/i);
+
+    await userEvent.click(toggle);
+
+    expect(toggle).toHaveTextContent(/light mode/i);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(window.localStorage.getItem("pm-theme")).toBe("dark");
+  });
 });

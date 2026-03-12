@@ -167,7 +167,7 @@ Scope:
 
 Implementation checklist:
 - [x] Add OpenRouter client using `OPENROUTER_API_KEY` from `.env`.
-- [x] Use model `openai/gpt-oss-120b:free`.
+- [x] Use model `openai/gpt-oss-120b`.
 - [x] Add simple test call path for prompt `2+2`.
 
 Test checklist:

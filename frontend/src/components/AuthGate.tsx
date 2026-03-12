@@ -6,6 +6,8 @@ import { clearAuthToken, getAuthToken, setAuthToken, type AuthUser } from "@/lib
 import { getMe, login, logout, register } from "@/lib/api";
 
 type Mode = "login" | "register";
+type Theme = "light" | "dark";
+const THEME_KEY = "pm-theme";
 
 export const AuthGate = () => {
   const [mode, setMode] = useState<Mode>("login");
@@ -16,8 +18,14 @@ export const AuthGate = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
+    const storedTheme = window.localStorage.getItem(THEME_KEY);
+    const resolvedTheme: Theme = storedTheme === "dark" ? "dark" : "light";
+    setTheme(resolvedTheme);
+    document.documentElement.setAttribute("data-theme", resolvedTheme);
+
     const bootstrap = async () => {
       const token = getAuthToken();
       if (!token) {
@@ -36,6 +44,15 @@ export const AuthGate = () => {
 
     void bootstrap();
   }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -83,6 +100,14 @@ export const AuthGate = () => {
   if (!currentUser) {
     return (
       <main className="flex min-h-screen items-center justify-center px-6 py-12">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="fixed left-4 top-4 z-10 rounded-full border border-[var(--stroke)] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--navy-dark)] shadow-[var(--shadow)]"
+          aria-label="Toggle theme"
+        >
+          {theme === "dark" ? "Light mode" : "Dark mode"}
+        </button>
         <section className="w-full max-w-md rounded-3xl border border-[var(--stroke)] bg-white p-8 shadow-[var(--shadow)]">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
             Project Management
@@ -186,6 +211,16 @@ export const AuthGate = () => {
 
   return (
     <div>
+      <div className="fixed left-4 top-4 z-10">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="rounded-full border border-[var(--stroke)] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--navy-dark)] shadow-[var(--shadow)]"
+          aria-label="Toggle theme"
+        >
+          {theme === "dark" ? "Light mode" : "Dark mode"}
+        </button>
+      </div>
       <div className="fixed right-4 top-4 z-10 flex items-center gap-2 rounded-full border border-[var(--stroke)] bg-white px-4 py-2 shadow-[var(--shadow)]">
         <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--gray-text)]">
           {currentUser.display_name}

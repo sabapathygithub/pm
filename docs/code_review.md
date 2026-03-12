@@ -127,7 +127,7 @@ The highest risks are security and data integrity in backend auth handling, plus
 - File: `backend/README.md:20`
 - Issue: `(free)` vs `:free` mismatch.
 - Risk: setup confusion.
-- Recommendation: Standardize on `openai/gpt-oss-120b:free`.
+- Recommendation: Standardize on `openai/gpt-oss-120b`.
 
 ### 15) `.dockerignore` should exclude `.env`
 - Severity: Low
