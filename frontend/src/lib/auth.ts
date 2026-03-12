@@ -1,9 +1,9 @@
-export const AUTH_TOKEN_KEY = "pm-auth-token";
-export const VALID_USERNAME = "user";
-export const VALID_PASSWORD = "password";
+export const AUTH_TOKEN_KEY = "pm-session-token";
 
-export const buildAuthToken = (username: string, password: string): string => {
-  return btoa(`${username}:${password}`);
+export type AuthUser = {
+  id: number;
+  username: string;
+  display_name: string;
 };
 
 export const getAuthToken = (): string | null => {
@@ -13,6 +13,13 @@ export const getAuthToken = (): string | null => {
 
   const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
   return token && token.trim() ? token : null;
+};
+
+export const setAuthToken = (token: string): void => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
 };
 
 export const clearAuthToken = (): void => {

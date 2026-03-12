@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { Card, Column } from "@/lib/kanban";
+import type { Card, CardPriority, Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
@@ -9,8 +9,28 @@ type KanbanColumnProps = {
   column: Column;
   cards: Card[];
   onRename: (columnId: string, title: string) => void;
-  onAddCard: (columnId: string, title: string, details: string) => void;
-  onUpdateCard: (cardId: string, title: string, details: string) => void;
+  onAddCard: (
+    columnId: string,
+    title: string,
+    details: string,
+    metadata: {
+      priority: CardPriority;
+      assignee: string | null;
+      dueDate: string | null;
+      labels: string[];
+    }
+  ) => void;
+  onUpdateCard: (
+    cardId: string,
+    title: string,
+    details: string,
+    metadata: {
+      priority: CardPriority;
+      assignee: string | null;
+      dueDate: string | null;
+      labels: string[];
+    }
+  ) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
 };
 
@@ -50,7 +70,7 @@ export const KanbanColumn = ({
         </div>
       </div>
       <div className="mt-4 flex flex-1 flex-col gap-3">
-        <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
+        <SortableContext items={cards.map((card) => card.id)} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <KanbanCard
               key={card.id}
@@ -66,9 +86,7 @@ export const KanbanColumn = ({
           </div>
         )}
       </div>
-      <NewCardForm
-        onAdd={(title, details) => onAddCard(column.id, title, details)}
-      />
+      <NewCardForm onAdd={(title, details, metadata) => onAddCard(column.id, title, details, metadata)} />
     </section>
   );
 };

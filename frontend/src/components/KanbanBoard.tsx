@@ -16,13 +16,31 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { AiSidebar } from "@/components/AiSidebar";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { fetchBoard, runAiOperation, saveBoard } from "@/lib/api";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import {
+  activateBoard,
+  createBoard,
+  deleteBoard,
+  fetchBoard,
+  fetchBoardById,
+  listBoards,
+  renameBoard,
+  runAiOperation,
+  saveBoard,
+  saveBoardById,
+  type BoardSummary,
+} from "@/lib/api";
+import { createId, initialData, moveCard, type BoardData, type CardPriority } from "@/lib/kanban";
+import type { AuthUser } from "@/lib/auth";
 
-export const KanbanBoard = () => {
+export const KanbanBoard = ({ currentUser }: { currentUser: AuthUser }) => {
   const [board, setBoard] = useState<BoardData>(() => initialData);
+  const [boards, setBoards] = useState<BoardSummary[]>([]);
+  const [activeBoardId, setActiveBoardId] = useState<number | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string>("Ready");
+  const [searchText, setSearchText] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | CardPriority>("all");
+  const [labelFilter, setLabelFilter] = useState<string>("all");
   const [chatMessages, setChatMessages] = useState<
     Array<{ role: "user" | "assistant"; content: string }>
   >([{ role: "assistant", content: "Ask me to create, edit, move, or rename board items." }]);
@@ -32,26 +50,42 @@ export const KanbanBoard = () => {
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
   const renameSaveTimeoutRef = useRef<number | null>(null);
 
+  const loadBoards = async () => {
+    const boardList = await listBoards();
+    setBoards(boardList);
+    const active = boardList.find((item) => item.is_active) ?? boardList[0] ?? null;
+    setActiveBoardId(active?.id ?? null);
+    return active?.id ?? null;
+  };
+
   useEffect(() => {
     let isMounted = true;
-    setSyncMessage("Loading board...");
+    setSyncMessage("Loading boards...");
 
-    const loadBoard = async () => {
-      const serverBoard = await fetchBoard();
-      if (!isMounted) {
-        return;
+    const loadBoardData = async () => {
+      try {
+        const activeId = await loadBoards();
+        const serverBoard = activeId ? await fetchBoardById(activeId) : await fetchBoard();
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (serverBoard) {
+          setBoard(serverBoard);
+          setSyncMessage("Connected to backend");
+          return;
+        }
+
+        setSyncMessage("Using local demo board (backend unavailable)");
+      } catch {
+        if (isMounted) {
+          setSyncMessage("Using local demo board (backend unavailable)");
+        }
       }
-
-      if (serverBoard) {
-        setBoard(serverBoard);
-        setSyncMessage("Connected to backend");
-        return;
-      }
-
-      setSyncMessage("Using local demo board (backend unavailable)");
     };
 
-    void loadBoard();
+    void loadBoardData();
 
     return () => {
       isMounted = false;
@@ -69,7 +103,8 @@ export const KanbanBoard = () => {
   const applyBoardUpdate = (updater: (previous: BoardData) => BoardData) => {
     setBoard((previous) => {
       const next = updater(previous);
-      void saveBoard(next).then((ok) => {
+      const persist = activeBoardId ? saveBoardById(activeBoardId, next) : saveBoard(next);
+      void persist.then((ok) => {
         setSyncMessage(ok ? "Saved" : "Save failed (local changes still visible)");
       });
       return next;
@@ -86,6 +121,39 @@ export const KanbanBoard = () => {
   );
 
   const cardsById = useMemo(() => board.cards, [board.cards]);
+
+  const allLabels = useMemo(() => {
+    const labels = new Set<string>();
+    Object.values(board.cards).forEach((card) => {
+      (card.labels ?? []).forEach((label) => labels.add(label));
+    });
+    return ["all", ...Array.from(labels).sort((a, b) => a.localeCompare(b))];
+  }, [board.cards]);
+
+  const isVisible = (cardId: string) => {
+    const card = board.cards[cardId];
+    if (!card) {
+      return false;
+    }
+
+    const textFilter = searchText.trim().toLowerCase();
+    if (textFilter) {
+      const haystack = `${card.title} ${card.details} ${card.assignee ?? ""} ${(card.labels ?? []).join(" ")}`.toLowerCase();
+      if (!haystack.includes(textFilter)) {
+        return false;
+      }
+    }
+
+    if (priorityFilter !== "all" && (card.priority ?? "medium") !== priorityFilter) {
+      return false;
+    }
+
+    if (labelFilter !== "all" && !(card.labels ?? []).includes(labelFilter)) {
+      return false;
+    }
+
+    return true;
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -119,7 +187,8 @@ export const KanbanBoard = () => {
       }
 
       renameSaveTimeoutRef.current = window.setTimeout(() => {
-        void saveBoard(next).then((ok) => {
+        const persist = activeBoardId ? saveBoardById(activeBoardId, next) : saveBoard(next);
+        void persist.then((ok) => {
           setSyncMessage(ok ? "Saved" : "Save failed (local changes still visible)");
         });
       }, 350);
@@ -128,13 +197,31 @@ export const KanbanBoard = () => {
     });
   };
 
-  const handleAddCard = (columnId: string, title: string, details: string) => {
+  const handleAddCard = (
+    columnId: string,
+    title: string,
+    details: string,
+    metadata: {
+      priority: CardPriority;
+      assignee: string | null;
+      dueDate: string | null;
+      labels: string[];
+    }
+  ) => {
     const id = createId("card");
     applyBoardUpdate((prev) => ({
       ...prev,
       cards: {
         ...prev.cards,
-        [id]: { id, title, details: details || "No details yet." },
+        [id]: {
+          id,
+          title,
+          details: details || "No details yet.",
+          priority: metadata.priority,
+          assignee: metadata.assignee,
+          dueDate: metadata.dueDate,
+          labels: metadata.labels,
+        },
       },
       columns: prev.columns.map((column) =>
         column.id === columnId
@@ -144,7 +231,17 @@ export const KanbanBoard = () => {
     }));
   };
 
-  const handleUpdateCard = (cardId: string, title: string, details: string) => {
+  const handleUpdateCard = (
+    cardId: string,
+    title: string,
+    details: string,
+    metadata: {
+      priority: CardPriority;
+      assignee: string | null;
+      dueDate: string | null;
+      labels: string[];
+    }
+  ) => {
     applyBoardUpdate((prev) => ({
       ...prev,
       cards: {
@@ -153,6 +250,10 @@ export const KanbanBoard = () => {
           ...prev.cards[cardId],
           title,
           details,
+          priority: metadata.priority,
+          assignee: metadata.assignee,
+          dueDate: metadata.dueDate,
+          labels: metadata.labels,
         },
       },
     }));
@@ -189,7 +290,7 @@ export const KanbanBoard = () => {
     setChatMessages((prev) => [...prev, { role: "user", content: message }]);
 
     try {
-      const response = await runAiOperation(message);
+      const response = await runAiOperation(message, activeBoardId);
       setChatMessages((prev) => [
         ...prev,
         { role: "assistant", content: response.assistant_message },
@@ -219,7 +320,68 @@ export const KanbanBoard = () => {
     }
   };
 
+  const switchBoard = async (boardId: number) => {
+    await activateBoard(boardId);
+    setActiveBoardId(boardId);
+    const data = await fetchBoardById(boardId);
+    if (data) {
+      setBoard(data);
+      setSyncMessage("Board switched");
+    }
+    const updated = await listBoards();
+    setBoards(updated);
+  };
+
+  const createNewBoard = async () => {
+    const name = window.prompt("New board name", `Board ${boards.length + 1}`);
+    if (!name) {
+      return;
+    }
+    const created = await createBoard(name);
+    const updatedBoards = await listBoards();
+    setBoards(updatedBoards);
+    await switchBoard(created.id);
+  };
+
+  const renameCurrentBoard = async () => {
+    if (!activeBoardId) {
+      return;
+    }
+    const current = boards.find((item) => item.id === activeBoardId);
+    const nextName = window.prompt("Rename board", current?.name ?? "");
+    if (!nextName) {
+      return;
+    }
+    await renameBoard(activeBoardId, nextName);
+    setBoards(await listBoards());
+    setSyncMessage("Board renamed");
+  };
+
+  const deleteCurrentBoard = async () => {
+    if (!activeBoardId) {
+      return;
+    }
+    const confirmed = window.confirm("Delete current board?");
+    if (!confirmed) {
+      return;
+    }
+    await deleteBoard(activeBoardId);
+    const updated = await listBoards();
+    setBoards(updated);
+    const active = updated.find((item) => item.is_active) ?? updated[0] ?? null;
+    setActiveBoardId(active?.id ?? null);
+    if (active) {
+      const data = await fetchBoardById(active.id);
+      if (data) {
+        setBoard(data);
+      }
+    }
+    setSyncMessage("Board deleted");
+  };
+
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
+
+  const visibleCardsCount = Object.keys(board.cards).filter((cardId) => isVisible(cardId)).length;
 
   return (
     <div className="relative overflow-hidden">
@@ -231,15 +393,12 @@ export const KanbanBoard = () => {
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
+                Multi-board workspace
               </p>
               <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
                 Kanban Studio
               </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
-              </p>
+              <p className="mt-2 text-sm text-[var(--gray-text)]">Welcome, {currentUser.display_name}</p>
               <p
                 className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--gray-text)]"
                 role="status"
@@ -250,23 +409,83 @@ export const KanbanBoard = () => {
             </div>
             <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                Focus
+                Visible cards
               </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                One board. Five columns. Zero clutter.
-              </p>
+              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">{visibleCardsCount}</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-4">
-            {board.columns.map((column) => (
-              <div
-                key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
-              >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
-              </div>
-            ))}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={activeBoardId ?? ""}
+              onChange={(event) => {
+                const id = Number(event.target.value);
+                if (!Number.isNaN(id)) {
+                  void switchBoard(id);
+                }
+              }}
+              className="rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm"
+              aria-label="Board selector"
+            >
+              {boards.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="rounded-full bg-[var(--secondary-purple)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-white"
+              onClick={() => void createNewBoard()}
+            >
+              New board
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--navy-dark)]"
+              onClick={() => void renameCurrentBoard()}
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--navy-dark)]"
+              onClick={() => void deleteCurrentBoard()}
+            >
+              Delete
+            </button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <input
+              type="text"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search title, details, assignee, label"
+              className="rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm"
+            />
+            <select
+              value={priorityFilter}
+              onChange={(event) => setPriorityFilter(event.target.value as "all" | CardPriority)}
+              className="rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm"
+            >
+              <option value="all">All priorities</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+            <select
+              value={labelFilter}
+              onChange={(event) => setLabelFilter(event.target.value)}
+              className="rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm"
+            >
+              {allLabels.map((label) => (
+                <option key={label} value={label}>
+                  {label === "all" ? "All labels" : label}
+                </option>
+              ))}
+            </select>
           </div>
         </header>
 
@@ -287,6 +506,7 @@ export const KanbanBoard = () => {
                   key={column.id}
                   column={column}
                   cards={column.cardIds
+                    .filter((cardId) => isVisible(cardId))
                     .map((cardId) => board.cards[cardId])
                     .filter((card): card is (typeof board.cards)[string] => Boolean(card))}
                   onRename={handleRenameColumn}

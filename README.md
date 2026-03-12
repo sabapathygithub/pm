@@ -1,6 +1,6 @@
-# Project Management MVP
+# Project Management App
 
-A local-first Project Management MVP with a Kanban board and AI assistant.
+A local-first project management app with multi-user auth, multi-board Kanban, and AI assistance.
 
 Tech stack:
 - Frontend: Next.js + React + TypeScript
@@ -10,12 +10,13 @@ Tech stack:
 
 ## Features
 
-- Login gate with MVP credentials (`user` / `password`)
-- Single Kanban board per user
-- Fixed columns with editable column titles
-- Card create, edit, delete, and drag-and-drop move
+- User authentication (`register`, `login`, `logout`, `me`) with session tokens
+- Multi-board workspace per user (create, rename, delete, switch active board)
+- Fixed-column Kanban board with persistence in SQLite
+- Card create, edit, delete, drag-and-drop move
+- Card metadata: priority, assignee, due date, labels
+- Search and filter (text, priority, label)
 - AI sidebar that can respond and optionally apply board updates
-- Board persistence in SQLite
 
 ## Repository Layout
 
@@ -97,6 +98,45 @@ docker compose up --build
 
 Open `http://localhost:8000`.
 
+## Deploy on Vercel
+
+This repository is a split architecture in production:
+- Deploy `frontend/` to Vercel.
+- Deploy `backend/` to another host (Render, Railway, Fly.io, etc.) because SQLite on Vercel serverless is ephemeral and not durable.
+
+### 1) Deploy frontend to Vercel
+
+In Vercel project settings:
+- Root Directory: `frontend`
+- Build Command: `npm run build`
+- Output: default Next.js
+
+Set frontend environment variable:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://your-backend-domain
+```
+
+`NEXT_PUBLIC_API_BASE_URL` is optional for local same-origin usage. In Vercel, set it to your backend base URL so frontend calls:
+- `${NEXT_PUBLIC_API_BASE_URL}/api/board`
+- `${NEXT_PUBLIC_API_BASE_URL}/api/ai/operate`
+
+### 2) Deploy backend separately
+
+Backend required environment variables:
+
+```env
+OPENROUTER_API_KEY=your_key_here
+```
+
+Optional backend env:
+
+```env
+PM_DB_PATH=/absolute/path/to/pm.db
+```
+
+Important: for production persistence, use durable storage (managed database). SQLite local disk is fine for local/dev but not reliable on serverless ephemeral filesystems.
+
 ## Testing
 
 Backend tests:
@@ -130,10 +170,19 @@ npm run test:all
 
 ## API Summary
 
-- `GET /api/health`
-- `GET /api/hello`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `GET /api/boards`
+- `POST /api/boards`
+- `PATCH /api/boards/{board_id}`
+- `DELETE /api/boards/{board_id}`
+- `POST /api/boards/{board_id}/activate`
 - `GET /api/board`
 - `PUT /api/board`
+- `GET /api/boards/{board_id}/board`
+- `PUT /api/boards/{board_id}/board`
 - `GET /api/ai/smoke`
 - `POST /api/ai/operate`
 

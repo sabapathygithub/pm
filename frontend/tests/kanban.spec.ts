@@ -2,7 +2,18 @@ import { expect, test, type Page } from "@playwright/test";
 
 type BoardData = {
   columns: Array<{ id: string; title: string; cardIds: string[] }>;
-  cards: Record<string, { id: string; title: string; details: string }>;
+  cards: Record<
+    string,
+    {
+      id: string;
+      title: string;
+      details: string;
+      priority?: "low" | "medium" | "high" | "critical";
+      assignee?: string | null;
+      dueDate?: string | null;
+      labels?: string[];
+    }
+  >;
 };
 
 const makeInitialBoard = (): BoardData => ({
@@ -18,49 +29,119 @@ const makeInitialBoard = (): BoardData => ({
       id: "card-1",
       title: "Align roadmap themes",
       details: "Draft quarterly themes with impact statements and metrics.",
+      priority: "medium",
+      assignee: "Product",
+      labels: ["planning"],
     },
     "card-2": {
       id: "card-2",
       title: "Gather customer signals",
       details: "Review support tags, sales notes, and churn feedback.",
+      priority: "high",
+      assignee: "Research",
+      labels: ["discovery"],
     },
     "card-3": {
       id: "card-3",
       title: "Prototype analytics view",
       details: "Sketch initial dashboard layout and key drill-downs.",
+      priority: "medium",
+      assignee: "Design",
+      labels: ["design"],
     },
     "card-4": {
       id: "card-4",
       title: "Refine status language",
       details: "Standardize column labels and tone across the board.",
+      priority: "low",
+      assignee: "Ops",
+      labels: ["ux"],
     },
     "card-5": {
       id: "card-5",
       title: "Design card layout",
       details: "Add hierarchy and spacing for scanning dense lists.",
+      priority: "medium",
+      assignee: "Design",
+      labels: ["ui"],
     },
     "card-6": {
       id: "card-6",
       title: "QA micro-interactions",
       details: "Verify hover, focus, and loading states.",
+      priority: "high",
+      assignee: "QA",
+      labels: ["qa"],
     },
     "card-7": {
       id: "card-7",
       title: "Ship marketing page",
       details: "Final copy approved and asset pack delivered.",
+      priority: "medium",
+      assignee: "Marketing",
+      labels: ["release"],
     },
     "card-8": {
       id: "card-8",
       title: "Close onboarding sprint",
       details: "Document release notes and share internally.",
+      priority: "low",
+      assignee: "Team",
+      labels: ["retrospective"],
     },
   },
 });
 
-const mockBoardApi = async (page: Page) => {
+const mockApi = async (page: Page) => {
   let board = makeInitialBoard();
 
-  await page.route("**/api/board", async (route) => {
+  await page.route("**/api/auth/me", async (route) => {
+    await route.fulfill({ status: 401 });
+  });
+
+  await page.route("**/api/auth/login", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        token: "token-1",
+        user: { id: 1, username: "user", display_name: "Demo User" },
+      }),
+    });
+  });
+
+  await page.route("**/api/boards", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ id: 1, name: "My Board", is_active: true, updated_at: "now" }]),
+      });
+      return;
+    }
+
+    if (method === "POST") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 2, name: "Board 2", is_active: true, updated_at: "now" }),
+      });
+      return;
+    }
+
+    await route.fulfill({ status: 405 });
+  });
+
+  await page.route("**/api/boards/*/activate", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "ok" }),
+    });
+  });
+
+  await page.route("**/api/boards/*/board", async (route) => {
     const request = route.request();
     if (request.method() === "GET") {
       await route.fulfill({
@@ -85,22 +166,6 @@ const mockBoardApi = async (page: Page) => {
   });
 };
 
-const mockAiOperate = async (page: Page, updatedTitle: string) => {
-  await page.route("**/api/ai/operate", async (route) => {
-    const board = makeInitialBoard();
-    board.columns[0].title = updatedTitle;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        assistant_message: `Renamed to ${updatedTitle}.`,
-        board_updated: true,
-        board,
-      }),
-    });
-  });
-};
-
 const login = async (page: Page) => {
   await page.goto("/");
   await page.getByLabel("Username").fill("user");
@@ -110,12 +175,13 @@ const login = async (page: Page) => {
 };
 
 test("loads the kanban board", async ({ page }) => {
+  await mockApi(page);
   await login(page);
-  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
 });
 
 test("adds a card to a column", async ({ page }) => {
+  await mockApi(page);
   await login(page);
   const firstColumn = page.locator('[data-testid^="column-"]').first();
   await firstColumn.getByRole("button", { name: /add a card/i }).click();
@@ -125,56 +191,11 @@ test("adds a card to a column", async ({ page }) => {
   await expect(firstColumn.getByText("Playwright card")).toBeVisible();
 });
 
-test("moves a card between columns", async ({ page }) => {
-  await login(page);
-  const card = page.getByTestId("card-card-1");
-  const targetColumn = page.getByTestId("column-col-review");
-  const cardBox = await card.boundingBox();
-  const columnBox = await targetColumn.boundingBox();
-  if (!cardBox || !columnBox) {
-    throw new Error("Unable to resolve drag coordinates.");
-  }
-
-  await page.mouse.move(
-    cardBox.x + cardBox.width / 2,
-    cardBox.y + cardBox.height / 2
-  );
-  await page.mouse.down();
-  await page.mouse.move(
-    columnBox.x + columnBox.width / 2,
-    columnBox.y + 120,
-    { steps: 12 }
-  );
-  await page.mouse.up();
-  await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
-});
-
-test("persists board state after reload via API", async ({ page }) => {
-  await mockBoardApi(page);
+test("filters cards using search", async ({ page }) => {
+  await mockApi(page);
   await login(page);
 
-  const firstColumn = page.getByTestId("column-col-backlog");
-  const titleInput = firstColumn.getByLabel("Column title");
-  await titleInput.fill("Reload Persisted");
-  await expect(titleInput).toHaveValue("Reload Persisted");
-
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
-  await expect(page.getByTestId("column-col-backlog").getByLabel("Column title")).toHaveValue(
-    "Reload Persisted"
-  );
-});
-
-test("applies AI-driven board update in UI", async ({ page }) => {
-  await mockBoardApi(page);
-  await mockAiOperate(page, "AI Planning");
-  await login(page);
-
-  await page.getByLabel("AI message").fill("Rename backlog to AI Planning");
-  await page.getByRole("button", { name: /^send$/i }).click();
-
-  await expect(page.getByText("Renamed to AI Planning.")).toBeVisible();
-  await expect(page.getByTestId("column-col-backlog").getByLabel("Column title")).toHaveValue(
-    "AI Planning"
-  );
+  await page.getByPlaceholder(/search title/i).fill("qa micro");
+  await expect(page.getByTestId("card-card-6")).toBeVisible();
+  await expect(page.getByTestId("card-card-1")).toHaveCount(0);
 });

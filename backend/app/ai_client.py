@@ -1,7 +1,7 @@
 import httpx
 import json
 
-OPENROUTER_MODEL = "openai/gpt-oss-20b:free"
+OPENROUTER_MODEL = "openai/gpt-oss-120b:free"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
@@ -77,10 +77,11 @@ def request_board_operation(
     api_key: str,
 ) -> dict:
     prompt = (
-        "You are helping with a Kanban board. "
+        "You are helping with a project management Kanban board. "
         "Return only valid JSON with exactly these keys: "
         '"assistant_message" (string) and "board_update" (object or null). '
         "If no board change is needed, set board_update to null.\n\n"
+        "You may update card title/details/priority/assignee/dueDate/labels and move cards between columns.\n\n"
         f"Current board JSON:\n{json.dumps(board)}\n\n"
         f"Conversation history JSON:\n{json.dumps(history)}\n\n"
         f"User message:\n{user_message}"

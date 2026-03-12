@@ -2,60 +2,137 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import {
-  AUTH_TOKEN_KEY,
-  buildAuthToken,
-  clearAuthToken,
-  VALID_PASSWORD,
-  VALID_USERNAME,
-} from "@/lib/auth";
+import { clearAuthToken, getAuthToken, setAuthToken, type AuthUser } from "@/lib/auth";
+import { getMe, login, logout, register } from "@/lib/api";
+
+type Mode = "login" | "register";
 
 export const AuthGate = () => {
+  const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    const existing = window.localStorage.getItem(AUTH_TOKEN_KEY);
-    setIsLoggedIn(Boolean(existing));
+    const bootstrap = async () => {
+      const token = getAuthToken();
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      const me = await getMe();
+      if (!me) {
+        clearAuthToken();
+        setIsLoading(false);
+        return;
+      }
+      setCurrentUser(me);
+      setIsLoading(false);
+    };
+
+    void bootstrap();
   }, []);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError("");
+    setIsSubmitting(true);
 
-    if (username === VALID_USERNAME && password === VALID_PASSWORD) {
-      window.localStorage.setItem(AUTH_TOKEN_KEY, buildAuthToken(username, password));
-      setError("");
+    try {
+      const auth =
+        mode === "login"
+          ? await login(username, password)
+          : await register(username, password, displayName);
+      setAuthToken(auth.token);
+      setCurrentUser(auth.user);
       setUsername("");
       setPassword("");
-      setIsLoggedIn(true);
-      return;
+      setDisplayName("");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error && submitError.message
+          ? submitError.message
+          : "Unable to continue."
+      );
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setError("Invalid credentials. Use user / password.");
   };
 
-  const handleLogout = () => {
-    clearAuthToken();
-    setIsLoggedIn(false);
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      clearAuthToken();
+      setCurrentUser(null);
+    }
   };
 
-  if (!isLoggedIn) {
+  if (isLoading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-[var(--gray-text)]">Loading...</p>
+      </main>
+    );
+  }
+
+  if (!currentUser) {
     return (
       <main className="flex min-h-screen items-center justify-center px-6 py-12">
         <section className="w-full max-w-md rounded-3xl border border-[var(--stroke)] bg-white p-8 shadow-[var(--shadow)]">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-            PM MVP Login
+            Project Management
           </p>
           <h1 className="mt-3 font-display text-3xl font-semibold text-[var(--navy-dark)]">
-            Sign in to Kanban Studio
+            Sign in
           </h1>
           <p className="mt-2 text-sm text-[var(--gray-text)]">
-            Use the MVP credentials to continue.
+            {mode === "login" ? "Continue with your account." : "Create a new account."}
           </p>
 
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMode("login")}
+              className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.1em] ${
+                mode === "login"
+                  ? "bg-[var(--primary-blue)] text-white"
+                  : "border border-[var(--stroke)] text-[var(--gray-text)]"
+              }`}
+            >
+              Login
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("register")}
+              className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.1em] ${
+                mode === "register"
+                  ? "bg-[var(--primary-blue)] text-white"
+                  : "border border-[var(--stroke)] text-[var(--gray-text)]"
+              }`}
+            >
+              Register
+            </button>
+          </div>
+
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+            {mode === "register" ? (
+              <label className="block text-sm font-semibold text-[var(--navy-dark)]">
+                Display name
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-2 outline-none focus:border-[var(--primary-blue)]"
+                  placeholder="Demo User"
+                />
+              </label>
+            ) : null}
+
             <label className="block text-sm font-semibold text-[var(--navy-dark)]">
               Username
               <input
@@ -65,6 +142,7 @@ export const AuthGate = () => {
                 className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-2 outline-none focus:border-[var(--primary-blue)]"
                 placeholder="user"
                 autoComplete="username"
+                required
               />
             </label>
 
@@ -77,25 +155,30 @@ export const AuthGate = () => {
                 className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-2 outline-none focus:border-[var(--primary-blue)]"
                 placeholder="password"
                 autoComplete="current-password"
+                required
               />
             </label>
 
             {error ? (
-              <p
-                className="text-sm font-semibold text-[var(--secondary-purple)]"
-                role="alert"
-              >
+              <p className="text-sm font-semibold text-[var(--secondary-purple)]" role="alert">
                 {error}
               </p>
             ) : null}
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              disabled={isSubmitting}
+              className="w-full rounded-xl bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
             >
-              Sign in
+              {isSubmitting ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
             </button>
           </form>
+
+          {mode === "login" ? (
+            <p className="mt-4 text-xs text-[var(--gray-text)]">
+              MVP default account: <span className="font-semibold">user / password</span>
+            </p>
+          ) : null}
         </section>
       </main>
     );
@@ -103,16 +186,19 @@ export const AuthGate = () => {
 
   return (
     <div>
-      <div className="fixed right-4 top-4 z-10">
+      <div className="fixed right-4 top-4 z-10 flex items-center gap-2 rounded-full border border-[var(--stroke)] bg-white px-4 py-2 shadow-[var(--shadow)]">
+        <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--gray-text)]">
+          {currentUser.display_name}
+        </span>
         <button
           type="button"
           onClick={handleLogout}
-          className="rounded-full border border-[var(--stroke)] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--navy-dark)] shadow-[var(--shadow)]"
+          className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--navy-dark)]"
         >
           Logout
         </button>
       </div>
-      <KanbanBoard />
+      <KanbanBoard currentUser={currentUser} />
     </div>
   );
 };

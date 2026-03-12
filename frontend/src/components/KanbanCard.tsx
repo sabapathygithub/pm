@@ -1,14 +1,24 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import { useEffect, useState } from "react";
-import type { Card } from "@/lib/kanban";
+import { useState } from "react";
+import type { Card, CardPriority } from "@/lib/kanban";
 
 const iconClassName = "h-3.5 w-3.5";
 
 type KanbanCardProps = {
   card: Card;
-  onUpdate: (cardId: string, title: string, details: string) => void;
+  onUpdate: (
+    cardId: string,
+    title: string,
+    details: string,
+    metadata: {
+      priority: CardPriority;
+      assignee: string | null;
+      dueDate: string | null;
+      labels: string[];
+    }
+  ) => void;
   onDelete: (cardId: string) => void;
 };
 
@@ -16,13 +26,12 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
   const [isEditing, setIsEditing] = useState(false);
-  const [title, setTitle] = useState(card.title);
-  const [details, setDetails] = useState(card.details);
-
-  useEffect(() => {
-    setTitle(card.title);
-    setDetails(card.details);
-  }, [card.title, card.details]);
+  const [title, setTitle] = useState("");
+  const [details, setDetails] = useState("");
+  const [priority, setPriority] = useState<CardPriority>("medium");
+  const [assignee, setAssignee] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [labels, setLabels] = useState("");
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -32,15 +41,19 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
   const handleSave = () => {
     const nextTitle = title.trim() || "Untitled";
     const nextDetails = details.trim() || "No details yet.";
-    onUpdate(card.id, nextTitle, nextDetails);
-    setTitle(nextTitle);
-    setDetails(nextDetails);
+    onUpdate(card.id, nextTitle, nextDetails, {
+      priority,
+      assignee: assignee.trim() || null,
+      dueDate: dueDate || null,
+      labels: labels
+        .split(",")
+        .map((label) => label.trim())
+        .filter(Boolean),
+    });
     setIsEditing(false);
   };
 
   const handleCancel = () => {
-    setTitle(card.title);
-    setDetails(card.details);
     setIsEditing(false);
   };
 
@@ -59,7 +72,7 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
       data-testid={`card-${card.id}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="w-full">
           {isEditing ? (
             <div className="space-y-2">
               <input
@@ -71,9 +84,43 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
               <textarea
                 value={details}
                 onChange={(event) => setDetails(event.target.value)}
-                rows={3}
+                rows={2}
                 className="w-full rounded-lg border border-[var(--stroke)] px-2 py-1 text-sm leading-6 text-[var(--gray-text)] outline-none"
                 aria-label="Card details"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={priority}
+                  onChange={(event) => setPriority(event.target.value as CardPriority)}
+                  aria-label="Card priority"
+                  className="rounded-lg border border-[var(--stroke)] px-2 py-1 text-xs"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                  aria-label="Card due date"
+                  className="rounded-lg border border-[var(--stroke)] px-2 py-1 text-xs"
+                />
+              </div>
+              <input
+                value={assignee}
+                onChange={(event) => setAssignee(event.target.value)}
+                aria-label="Card assignee"
+                placeholder="Assignee"
+                className="w-full rounded-lg border border-[var(--stroke)] px-2 py-1 text-xs"
+              />
+              <input
+                value={labels}
+                onChange={(event) => setLabels(event.target.value)}
+                aria-label="Card labels"
+                placeholder="Labels (comma separated)"
+                className="w-full rounded-lg border border-[var(--stroke)] px-2 py-1 text-xs"
               />
             </div>
           ) : (
@@ -81,9 +128,22 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
               <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
                 {card.title}
               </h4>
-              <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
-                {card.details}
-              </p>
+              <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">{card.details}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.08em]">
+                <span className="rounded-full border border-[var(--stroke)] px-2 py-1 text-[var(--primary-blue)]">
+                  {card.priority ?? "medium"}
+                </span>
+                {card.assignee ? (
+                  <span className="rounded-full border border-[var(--stroke)] px-2 py-1 text-[var(--gray-text)]">
+                    {card.assignee}
+                  </span>
+                ) : null}
+                {card.dueDate ? (
+                  <span className="rounded-full border border-[var(--stroke)] px-2 py-1 text-[var(--secondary-purple)]">
+                    due {card.dueDate}
+                  </span>
+                ) : null}
+              </div>
             </>
           )}
         </div>
@@ -135,7 +195,15 @@ export const KanbanCard = ({ card, onUpdate, onDelete }: KanbanCardProps) => {
           ) : (
             <button
               type="button"
-              onClick={() => setIsEditing(true)}
+              onClick={() => {
+                setTitle(card.title);
+                setDetails(card.details);
+                setPriority(card.priority ?? "medium");
+                setAssignee(card.assignee ?? "");
+                setDueDate(card.dueDate ?? "");
+                setLabels((card.labels ?? []).join(", "));
+                setIsEditing(true);
+              }}
               className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
               aria-label={`Edit ${card.title}`}
             >

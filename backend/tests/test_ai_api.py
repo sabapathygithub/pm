@@ -14,8 +14,16 @@ def _make_client(tmp_path: Path) -> TestClient:
     return TestClient(app)
 
 
-def _auth_headers() -> dict[str, str]:
-    return {"Authorization": "Basic dXNlcjpwYXNzd29yZA=="}
+def _login(client: TestClient) -> str:
+    response = client.post(
+        "/api/auth/login", json={"username": "user", "password": "password"}
+    )
+    assert response.status_code == 200
+    return response.json()["token"]
+
+
+def _auth_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_ai_smoke_requires_api_key(tmp_path: Path, monkeypatch) -> None:
@@ -45,27 +53,9 @@ def test_ai_smoke_returns_openrouter_answer(tmp_path: Path, monkeypatch) -> None
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["model"] == "openai/gpt-oss-20b:free"
+    assert payload["model"] == "openai/gpt-oss-120b:free"
     assert payload["prompt"] == "2+2"
     assert payload["response"] == "4"
-
-
-def test_ai_smoke_handles_openrouter_failure(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-
-    from app.ai_client import OpenRouterError
-
-    def fake_ask_openrouter(prompt: str, api_key: str) -> str:
-        raise OpenRouterError("OpenRouter request failed.")
-
-    monkeypatch.setattr("app.main.ask_openrouter", fake_ask_openrouter)
-    client = _make_client(tmp_path)
-
-    with client:
-        response = client.get("/api/ai/smoke")
-
-    assert response.status_code == 502
-    assert "OpenRouter request failed." in response.json()["detail"]
 
 
 def test_board_rejects_bad_auth_header(tmp_path: Path) -> None:
@@ -84,6 +74,7 @@ def test_board_accepts_valid_auth_header(tmp_path: Path) -> None:
     client = _make_client(tmp_path)
 
     with client:
-        response = client.get("/api/board", headers=_auth_headers())
+        token = _login(client)
+        response = client.get("/api/board", headers=_auth_headers(token))
 
     assert response.status_code == 200

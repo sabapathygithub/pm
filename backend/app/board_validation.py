@@ -1,4 +1,15 @@
+from datetime import date
+
 from app.board_defaults import FIXED_COLUMN_IDS
+
+ALLOWED_PRIORITIES = {"low", "medium", "high", "critical"}
+
+
+def _validate_due_date(value: str) -> None:
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("Card dueDate must be an ISO date (YYYY-MM-DD).") from exc
 
 
 def validate_board_payload(board: dict) -> None:
@@ -61,6 +72,28 @@ def validate_board_payload(board: dict) -> None:
             raise ValueError("Card title must be a string.")
         if not isinstance(details, str):
             raise ValueError("Card details must be a string.")
+
+        priority = card.get("priority")
+        if priority is not None:
+            if not isinstance(priority, str) or priority not in ALLOWED_PRIORITIES:
+                raise ValueError("Card priority must be one of: low, medium, high, critical.")
+
+        assignee = card.get("assignee")
+        if assignee is not None and not isinstance(assignee, str):
+            raise ValueError("Card assignee must be a string or null.")
+
+        due_date = card.get("dueDate")
+        if due_date is not None:
+            if not isinstance(due_date, str):
+                raise ValueError("Card dueDate must be a string or null.")
+            _validate_due_date(due_date)
+
+        labels = card.get("labels")
+        if labels is not None:
+            if not isinstance(labels, list) or not all(
+                isinstance(label, str) for label in labels
+            ):
+                raise ValueError("Card labels must be a list of strings.")
 
     if set(all_card_ids) != set(cards.keys()):
         raise ValueError("Card references in columns and cards map must match exactly.")
