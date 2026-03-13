@@ -296,6 +296,33 @@ def register_user(
         }
 
 
+def reset_password(db_path: Path, username: str, new_password: str) -> None:
+    clean_username = username.strip().lower()
+    if not clean_username:
+        raise ValueError("Username is required.")
+    if len(new_password) < 4:
+        raise ValueError("Password must be at least 4 characters.")
+
+    with _get_connection(db_path) as conn:
+        row = conn.execute(
+            "SELECT id FROM users WHERE username = ?",
+            (clean_username,),
+        ).fetchone()
+        if not row:
+            raise ValueError("User not found.")
+
+        user_id = int(row["id"])
+        conn.execute(
+            """
+            UPDATE users
+            SET password_hash = ?, updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (_hash_password(new_password), user_id),
+        )
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+
 def login_user(db_path: Path, username: str, password: str) -> tuple[str, dict]:
     with _get_connection(db_path) as conn:
         row = conn.execute(

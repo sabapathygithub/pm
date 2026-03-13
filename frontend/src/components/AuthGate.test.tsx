@@ -28,6 +28,20 @@ describe("AuthGate", () => {
         });
       }
 
+      if (input === "/api/auth/forgot-password" && init?.method === "POST") {
+        const body = JSON.parse((init.body as string) ?? "{}");
+        if (body.username === "user" && typeof body.new_password === "string" && body.new_password.length >= 4) {
+          return new Response(JSON.stringify({ status: "ok" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ detail: "User not found." }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       if (input === "/api/boards") {
         return new Response(
           JSON.stringify([{ id: 1, name: "My Board", is_active: true, updated_at: "now" }]),
@@ -108,5 +122,30 @@ describe("AuthGate", () => {
     expect(toggle).toHaveTextContent(/light mode/i);
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(window.localStorage.getItem("pm-theme")).toBe("dark");
+  });
+
+  it("supports forgot password flow", async () => {
+    render(<AuthGate />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /forgot password/i }));
+    await userEvent.type(await screen.findByLabelText(/username/i), "user");
+    await userEvent.type(screen.getByLabelText(/^new password$/i), "new-password");
+    await userEvent.type(screen.getByLabelText(/^confirm new password$/i), "new-password");
+    await userEvent.click(screen.getByRole("button", { name: /reset password/i }));
+
+    expect(await screen.findByText(/password reset complete/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+  });
+
+  it("rejects forgot password mismatch", async () => {
+    render(<AuthGate />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /forgot password/i }));
+    await userEvent.type(await screen.findByLabelText(/username/i), "user");
+    await userEvent.type(screen.getByLabelText(/^new password$/i), "new-password");
+    await userEvent.type(screen.getByLabelText(/^confirm new password$/i), "not-the-same");
+    await userEvent.click(screen.getByRole("button", { name: /reset password/i }));
+
+    expect(await screen.findByText(/passwords do not match/i)).toBeInTheDocument();
   });
 });

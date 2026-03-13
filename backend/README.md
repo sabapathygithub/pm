@@ -7,6 +7,7 @@ This backend currently serves:
 - `GET /api/hello` -> hello JSON
 - `POST /api/auth/register` -> create user and return bearer token
 - `POST /api/auth/login` -> login and return bearer token
+- `POST /api/auth/forgot-password` -> reset password by username
 - `POST /api/auth/logout` -> revoke bearer token
 - `GET /api/auth/me` -> current user from bearer token
 - `GET /api/boards` -> list boards for current user

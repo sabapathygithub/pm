@@ -3,9 +3,9 @@
 import { FormEvent, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { clearAuthToken, getAuthToken, setAuthToken, type AuthUser } from "@/lib/auth";
-import { getMe, login, logout, register } from "@/lib/api";
+import { forgotPassword, getMe, login, logout, register } from "@/lib/api";
 
-type Mode = "login" | "register";
+type Mode = "login" | "register" | "forgot";
 type Theme = "light" | "dark";
 const THEME_KEY = "pm-theme";
 
@@ -13,8 +13,10 @@ export const AuthGate = () => {
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -57,17 +59,28 @@ export const AuthGate = () => {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    setNotice("");
     setIsSubmitting(true);
 
     try {
-      const auth =
-        mode === "login"
-          ? await login(username, password)
-          : await register(username, password, displayName);
-      setAuthToken(auth.token);
-      setCurrentUser(auth.user);
+      if (mode === "forgot") {
+        if (password !== confirmPassword) {
+          throw new Error("Passwords do not match.");
+        }
+        await forgotPassword(username, password);
+        setMode("login");
+        setNotice("Password reset complete. Sign in with your new password.");
+      } else {
+        const auth =
+          mode === "login"
+            ? await login(username, password)
+            : await register(username, password, displayName);
+        setAuthToken(auth.token);
+        setCurrentUser(auth.user);
+      }
       setUsername("");
       setPassword("");
+      setConfirmPassword("");
       setDisplayName("");
     } catch (submitError) {
       setError(
@@ -113,10 +126,14 @@ export const AuthGate = () => {
             Project Management
           </p>
           <h1 className="mt-3 font-display text-3xl font-semibold text-[var(--navy-dark)]">
-            Sign in
+            {mode === "forgot" ? "Reset password" : "Sign in"}
           </h1>
           <p className="mt-2 text-sm text-[var(--gray-text)]">
-            {mode === "login" ? "Continue with your account." : "Create a new account."}
+            {mode === "login"
+              ? "Continue with your account."
+              : mode === "register"
+                ? "Create a new account."
+                : "Set a new password for your account."}
           </p>
 
           <div className="mt-4 flex gap-2">
@@ -172,32 +189,74 @@ export const AuthGate = () => {
             </label>
 
             <label className="block text-sm font-semibold text-[var(--navy-dark)]">
-              Password
+              {mode === "forgot" ? "New password" : "Password"}
               <input
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-2 outline-none focus:border-[var(--primary-blue)]"
-                placeholder="password"
-                autoComplete="current-password"
+                placeholder={mode === "forgot" ? "new password" : "password"}
+                autoComplete={mode === "forgot" ? "new-password" : "current-password"}
                 required
               />
             </label>
+
+            {mode === "login" ? (
+              <button
+                type="button"
+                onClick={() => setMode("forgot")}
+                className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--primary-blue)]"
+              >
+                Forgot password?
+              </button>
+            ) : null}
+
+            {mode === "forgot" ? (
+              <label className="block text-sm font-semibold text-[var(--navy-dark)]">
+                Confirm new password
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-2 outline-none focus:border-[var(--primary-blue)]"
+                  placeholder="confirm new password"
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+            ) : null}
 
             {error ? (
               <p className="text-sm font-semibold text-[var(--secondary-purple)]" role="alert">
                 {error}
               </p>
             ) : null}
+            {notice ? <p className="text-sm font-semibold text-[var(--primary-blue)]">{notice}</p> : null}
 
             <button
               type="submit"
               disabled={isSubmitting}
               className="w-full rounded-xl bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
             >
-              {isSubmitting ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
+              {isSubmitting
+                ? "Please wait..."
+                : mode === "login"
+                  ? "Sign in"
+                  : mode === "register"
+                    ? "Create account"
+                    : "Reset password"}
             </button>
           </form>
+
+          {mode === "forgot" ? (
+            <button
+              type="button"
+              onClick={() => setMode("login")}
+              className="mt-3 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--primary-blue)]"
+            >
+              Back to login
+            </button>
+          ) : null}
 
           {mode === "login" ? (
             <p className="mt-4 text-xs text-[var(--gray-text)]">

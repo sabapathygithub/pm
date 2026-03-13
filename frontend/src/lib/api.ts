@@ -150,6 +150,20 @@ export const logout = async (): Promise<void> => {
   });
 };
 
+export const forgotPassword = async (
+  username: string,
+  newPassword: string
+): Promise<void> => {
+  const response = await fetch(apiUrl("/api/auth/forgot-password"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, new_password: newPassword }),
+  });
+  if (!response.ok) {
+    throw new Error(await extractError(response, "Password reset failed."));
+  }
+};
+
 export const listBoards = async (): Promise<BoardSummary[]> => {
   const response = await fetch(apiUrl("/api/boards"), { headers: authHeaders() });
   if (!response.ok) {

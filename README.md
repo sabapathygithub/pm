@@ -11,6 +11,7 @@ Tech stack:
 ## Features
 
 - User authentication (`register`, `login`, `logout`, `me`) with session tokens
+- Forgot password flow (`forgot-password`) for username-based reset
 - Multi-board workspace per user (create, rename, delete, switch active board)
 - Fixed-column Kanban board with persistence in SQLite
 - Card create, edit, delete, drag-and-drop move
@@ -172,6 +173,7 @@ npm run test:all
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `POST /api/auth/forgot-password`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 - `GET /api/boards`

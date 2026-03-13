@@ -25,6 +25,7 @@ from app.database import (
     login_user,
     logout_user,
     register_user,
+    reset_password,
     rename_board,
     set_active_board,
     update_board,
@@ -47,6 +48,11 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    username: str
+    new_password: str
 
 
 class AuthResponse(BaseModel):
@@ -159,6 +165,18 @@ def create_app(db_path: Path | None = None) -> FastAPI:
             return AuthResponse(token=token, user=user).model_dump()
         except ValueError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    @app.post("/api/auth/forgot-password")
+    def forgot_password(payload: ForgotPasswordRequest) -> dict[str, str]:
+        try:
+            reset_password(
+                app.state.db_path,
+                username=payload.username,
+                new_password=payload.new_password,
+            )
+            return {"status": "ok"}
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/auth/logout")
     def logout(authorization: str | None = Header(default=None)) -> dict[str, str]:
